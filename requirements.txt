@@ -3,5 +3,5 @@ pandas
 numpy
 scikit-learn
 ultralytics
-opencv-python
+opencv-python-headless
 joblib

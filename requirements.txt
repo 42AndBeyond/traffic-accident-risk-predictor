@@ -5,3 +5,5 @@ scikit-learn
 ultralytics
 opencv-python-headless
 joblib
+streamlit-webrtc
+av

@@ -344,7 +344,7 @@ class RiskProcessor(VideoProcessorBase):
 # ---------- TABS ----------
 tab1, tab2 = st.tabs(["UPLOAD VIDEO", "LIVE CAMERA"])
 
-# ---------- TAB 1: VIDEO UPLOAD (with frame skipping for speed) ----------
+# ---------- TAB 1: VIDEO UPLOAD (Verify button, result remembered) ----------
 with tab1:
     voice_on_tab1 = st.toggle("Voice alerts", value=True, key="voice_tab1")
 
@@ -352,38 +352,43 @@ with tab1:
     uploaded_video = st.file_uploader("Upload a traffic video", type=["mp4", "avi", "mov"], label_visibility="collapsed")
 
     if uploaded_video is not None:
-        tfile = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
-        tfile.write(uploaded_video.read())
-        video_path = tfile.name
-        st.video(video_path)
+        st.video(uploaded_video)
 
-        with st.spinner("Detecting vehicles..."):
-            cap = cv2.VideoCapture(video_path)
-            frame_skip = 10
-            traffic_counts = []
-            frame_idx = 0
+        if st.button("Verify", key="verify_btn"):
+            tfile = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
+            tfile.write(uploaded_video.getvalue())
+            tfile.close()
 
-            while cap.isOpened():
-                ret, frame = cap.read()
-                if not ret:
-                    break
-                if frame_idx % frame_skip == 0:
-                    results = yolo_model(frame, verbose=False)
-                    count = 0
-                    for box in results[0].boxes:
-                        class_name = yolo_model.names[int(box.cls[0])]
-                        if class_name in vehicle_classes:
-                            count += 1
-                    traffic_counts.append(count)
-                frame_idx += 1
+            with st.spinner("Detecting vehicles..."):
+                cap = cv2.VideoCapture(tfile.name)
+                frame_skip = 10
+                traffic_counts = []
+                frame_idx = 0
 
-            cap.release()
+                while cap.isOpened():
+                    ret, frame = cap.read()
+                    if not ret:
+                        break
+                    if frame_idx % frame_skip == 0:
+                        results = yolo_model(frame, verbose=False)
+                        count = 0
+                        for box in results[0].boxes:
+                            class_name = yolo_model.names[int(box.cls[0])]
+                            if class_name in vehicle_classes:
+                                count += 1
+                        traffic_counts.append(count)
+                    frame_idx += 1
 
-        avg_count = np.mean(traffic_counts) if traffic_counts else 0
-        density_label = "Low" if avg_count < 5 else "Medium" if avg_count < 10 else "High"
-        prob = run_risk_model(density_label)
+                cap.release()
 
-        show_results(avg_count, density_label, prob, voice_enabled=voice_on_tab1, session_key="last_risk_video")
+            avg_count = np.mean(traffic_counts) if traffic_counts else 0
+            density_label = "Low" if avg_count < 5 else "Medium" if avg_count < 10 else "High"
+            prob = run_risk_model(density_label)
+            st.session_state["video_result"] = (avg_count, density_label, prob, uploaded_video.name)
+
+        saved = st.session_state.get("video_result")
+        if saved and saved[3] == uploaded_video.name:
+            show_results(saved[0], saved[1], saved[2], voice_enabled=voice_on_tab1, session_key="last_risk_video")
 
 # ---------- TAB 2: LIVE CAMERA (AUTO-CAPTURE, with STUN server fix) ----------
 with tab2:
